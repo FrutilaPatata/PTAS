@@ -111,7 +111,6 @@ elif args.read:
                 else:
                     try:
                         k_int = int(p)
-                        mapped_parts.append(keymap_inv.get(k_int, f"Unknown({k_int})"))
                     except ValueError:
                         mapped_parts.append(p)
             f.write(",".join(mapped_parts) + line_ending)
