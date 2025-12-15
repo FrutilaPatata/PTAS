@@ -8,7 +8,7 @@ import argparse
 # -------------------------------
 keymaptak = {
     "w": 87, "a": 65, "s": 83, "d": 68,
-    "shift": 16, " ": 32, "o": 79, "c": 67,
+    "sft": 16, "spc": 32, "o": 79, "c": 67,
     "esc": 27,
     "l": 76, "i": 73, "k": 75, "e": 69,
 }
@@ -111,6 +111,7 @@ elif args.read:
                 else:
                     try:
                         k_int = int(p)
+                        mapped_parts.append(keymap_inv.get(k_int, f"{k_int}"))
                     except ValueError:
                         mapped_parts.append(p)
             f.write(",".join(mapped_parts) + line_ending)
