@@ -78,8 +78,7 @@ player-defined controls.
 
 ## Versioning
 
--   **PTAS v1** --- Stable and frozen
--   **PTAS v2** --- In development
+-   **PTAS v1** --- In development
 
 Future versions may introduce optional higher-level abstractions while
 preserving full compatibility with PTAS v1 scripts.
