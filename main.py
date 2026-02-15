@@ -6,13 +6,13 @@ import argparse
 # -------------------------------
 # Configuración de teclas
 # -------------------------------
-keymaptak = {
+keymap = {
     "w": 87, "a": 65, "s": 83, "d": 68,
     "sft": 16, "spc": 32, "o": 79, "c": 67,
     "esc": 27,
     "l": 76, "i": 73, "k": 75, "e": 69,
 }
-keymap_inv = {v: k for k, v in keymaptak.items()}
+keymap_inv = {v: k for k, v in keymap.items()}
 
 # -------------------------------
 # Paths conocidos
@@ -80,7 +80,7 @@ if args.write:
             tas_output += "\n"
             continue
         keys_in_line = [k.strip() for k in line.split(",") if k.strip()]
-        frame_codes = [str(keymaptak.get(k.lower(), "")) for k in keys_in_line]
+        frame_codes = [str(keymap.get(k.lower(), "")) for k in keys_in_line]
         tas_output += ",".join(frame_codes) + ",\n"
 
     # Guardar tas.ptm
@@ -108,6 +108,8 @@ elif args.read:
             for p in parts:
                 if p.strip() == "":
                     mapped_parts.append("")
+                elif ((p.strip() == "160") or (p.strip() == "161")) or (p.strip() == ","):
+                    pass
                 else:
                     try:
                         k_int = int(p)
