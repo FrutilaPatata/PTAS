@@ -21,7 +21,7 @@ pt_original = r"D:/SteamLibrary/steamapps/common/Pizza Tower/PizzaTower.exe"
 pt_tas      = r"D:/SteamLibrary/steamapps/common/Pizza Tower1/PizzaTower.exe"
 pt_path = os.path.expandvars(r"%APPDATA%\PizzaTower_GM2")
 tas_file = os.path.join(pt_path, "tas.ptm")
-tas_txt = r"D:/Leon/Python/ptas/tas.txt"
+tas_txt = r"./tas.txt"
 
 # -------------------------------
 # Función para encontrar Pizza Tower
@@ -40,8 +40,8 @@ def find_running_pizza():
 # -------------------------------
 parser = argparse.ArgumentParser(description="Convertir TAS TXT ↔ PTM automáticamente")
 group = parser.add_mutually_exclusive_group(required=True)
-group.add_argument("-r", "--read", action="store_true", help="Leer tas.ptm y generar tas.txt")
-group.add_argument("-w", "--write", action="store_true", help="Tomar tas.txt y sobrescribir tas.ptm")
+group.add_argument("-r", "--read", action="store_true", help="Read tas.ptm and generate tas.txt")
+group.add_argument("-w", "--write", action="store_true", help="Take tas.txt and overwrite tas.ptm")
 args = parser.parse_args()
 
 # -------------------------------
@@ -87,7 +87,7 @@ if args.write:
     with open(tas_file, "w") as out:
         out.write(tas_output)
 
-    print("✔ TAS PTM generado:", tas_file)
+    print("✔ TAS PTM generated:", tas_file)
 
 # -------------------------------
 # MODO READ: PTM → TXT
@@ -118,4 +118,4 @@ elif args.read:
                         mapped_parts.append(p)
             f.write(",".join(mapped_parts) + line_ending)
 
-    print("✔ Archivo legible creado:", tas_txt)
+    print("✔ Created readable file:", tas_txt)
