@@ -60,7 +60,7 @@ if args.write:
         elif running_exe == os.path.normpath(pt_original):
             print("⚠ Pizza Tower ORIGINAL abierto, no se cerrará.")
         else:
-            print("⚠ Pizza Tower abierto desde path desconocido, no se cerrará:", running_exe)
+            print("⚠ Pizza Tower abierto desde path desconocido, no se cerrará:", running_exe) 
 
     if not os.path.isdir(pt_path):
         print("ERROR: No existe la carpeta PizzaTower_GM2.")
