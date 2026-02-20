@@ -12,7 +12,7 @@ src_folder = os.path.join(BASE_DIR, "src")
 keymap_path = os.path.join(src_folder, "keymap.ini")
 
 # -------------------------------
-# Config base ORIGINAL del juego
+# Config base ORIGINAL (vanilla)
 # -------------------------------
 default_keymap = {
     "up": 38,
@@ -32,19 +32,21 @@ if not os.path.exists(keymap_path):
 
     os.makedirs(src_folder, exist_ok=True)
 
-    config = configparser.ConfigParser()
-    config["KEYMAP"] = {k: str(v) for k, v in default_keymap.items()}
+    config_create = configparser.ConfigParser()
+    config_create["KEYMAP"] = {k: str(v) for k, v in default_keymap.items()}
 
-    with open(keymap_path, "w") as f:
-        config.write(f)
+    with open(keymap_path, "w", encoding="utf-8") as f:
+        config_create.write(f)
 
     print("✔ keymap.ini creado automáticamente.")
 
 # -------------------------------
-# Cargar configuración
+# Leer archivo (anti-BOM Windows)
 # -------------------------------
 config = configparser.ConfigParser()
-config.read(keymap_path)
+
+with open(keymap_path, "r", encoding="utf-8-sig") as f:
+    config.read_file(f)
 
 if "KEYMAP" not in config:
     raise ValueError("ERROR: No existe la sección [KEYMAP] en keymap.ini")
@@ -74,10 +76,10 @@ for key, value in config["KEYMAP"].items():
         seen_values[value_int] = key
 
 # -------------------------------
-# Guardar cambios si hubo correcciones
+# Guardar si hubo correcciones
 # -------------------------------
 if modified:
-    with open(keymap_path, "w") as f:
+    with open(keymap_path, "w", encoding="utf-8") as f:
         config.write(f)
     print("✔ keymap.ini corregido automáticamente.")
 
