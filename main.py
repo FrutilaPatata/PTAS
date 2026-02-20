@@ -104,6 +104,8 @@ keymap_inv = {v: k for k, v in keymap.items()}
 pt_original = r"D:/SteamLibrary/steamapps/common/Pizza Tower/PizzaTower.exe"
 pt_tas = r"D:/SteamLibrary/steamapps/common/Pizza Tower1/PizzaTower.exe"
 pt_path = os.path.join(os.environ["APPDATA"], "PizzaTower_GM2")
+tas_file = os.path.join(pt_path, "tas.ptm")
+tas_txt = os.path.join(BASE_DIR, "tas.txt")
 
 # -------------------------------
 # Encontrar proceso
