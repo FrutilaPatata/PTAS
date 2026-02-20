@@ -5,9 +5,10 @@ import argparse
 import configparser
 
 # -------------------------------
-# Paths
+# Paths robustos
 # -------------------------------
-src_folder = "src"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+src_folder = os.path.join(BASE_DIR, "src")
 keymap_path = os.path.join(src_folder, "keymap.ini")
 
 # -------------------------------
