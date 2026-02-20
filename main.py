@@ -3,109 +3,122 @@ import os
 import time
 import argparse
 import configparser
+from collections import defaultdict
 
 # -------------------------------
 # Paths robustos
 # -------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 src_folder = os.path.join(BASE_DIR, "src")
-keymap_path = os.path.join(src_folder, "keymap.ini")
+config_path = os.path.join(src_folder, "config.ini")
 
 # -------------------------------
-# Config base ORIGINAL (vanilla)
+# Default KEYMAP (vanilla ejemplo)
 # -------------------------------
 default_keymap = {
-    "up": 38,
-    "down": 40,
-    "left": 37,
-    "right": 39,
-    "z": 90,
-    "x": 88,
-    "c": 67
+    "w": 87,
+    "a": 65,
+    "s": 83,
+    "d": 68,
+    "sft": 16,
+    "spc": 32,
+    "o": 79,
+    "c": 67,
+    "esc": 27,
+    "l": 76,
+    "i": 73,
+    "k": 75,
+    "e": 69,
+    "del": 46
 }
 
 # -------------------------------
-# Crear archivo si no existe
+# Default CONFIG
 # -------------------------------
-if not os.path.exists(keymap_path):
-    print("⚠ keymap.ini no encontrado, creando configuración base...")
+default_config = {
+    "auto_close_tas": "0",
+    "show_stats": "1"
+}
+
+# -------------------------------
+# Crear config.ini si no existe
+# -------------------------------
+if not os.path.exists(config_path):
+    print("⚠ config.ini no encontrado, creando archivo base...")
 
     os.makedirs(src_folder, exist_ok=True)
 
     config_create = configparser.ConfigParser()
+    config_create["CONFIG"] = default_config
     config_create["KEYMAP"] = {k: str(v) for k, v in default_keymap.items()}
 
-    with open(keymap_path, "w", encoding="utf-8") as f:
+    with open(config_path, "w", encoding="utf-8") as f:
         config_create.write(f)
 
-    print("✔ keymap.ini creado automáticamente.")
+    print("✔ config.ini creado.")
 
 # -------------------------------
-# Leer archivo (anti-BOM)
+# Leer config.ini
 # -------------------------------
 config = configparser.ConfigParser()
 
-with open(keymap_path, "r", encoding="utf-8-sig") as f:
+with open(config_path, "r", encoding="utf-8-sig") as f:
     config.read_file(f)
 
-if "KEYMAP" not in config:
-    raise ValueError("ERROR: No existe la sección [KEYMAP] en keymap.ini")
-
-# -------------------------------
-# Validar duplicados y valores inválidos
-# -------------------------------
 modified = False
-seen_values = {}
 
-for key, value in config["KEYMAP"].items():
-    try:
-        value_int = int(value)
-    except ValueError:
-        print(f"⚠ Valor inválido en '{key}', restaurando default si existe.")
-        if key in default_keymap:
-            config["KEYMAP"][key] = str(default_keymap[key])
-            modified = True
-        continue
+# Asegurar CONFIG
+if "CONFIG" not in config:
+    print("⚠ Sección [CONFIG] faltante, agregando defaults...")
+    config["CONFIG"] = default_config
+    modified = True
 
-    if value_int in seen_values:
-        print(f"⚠ Duplicado detectado ({value_int}) entre '{key}' y '{seen_values[value_int]}'.")
-        if key in default_keymap:
-            config["KEYMAP"][key] = str(default_keymap[key])
-            modified = True
-    else:
-        seen_values[value_int] = key
+# Asegurar KEYMAP
+if "KEYMAP" not in config:
+    raise ValueError("ERROR: No existe la sección [KEYMAP] en config.ini")
 
+# Guardar si fue modificado
 if modified:
-    with open(keymap_path, "w", encoding="utf-8") as f:
-        config.write(f)
-    print("✔ keymap.ini corregido automáticamente.")
+    new_config = configparser.ConfigParser()
+    new_config["CONFIG"] = config["CONFIG"]
+    new_config["KEYMAP"] = config["KEYMAP"]
+
+    with open(config_path, "w", encoding="utf-8") as f:
+        new_config.write(f)
+
+    config = new_config
+    print("✔ config.ini actualizado automáticamente.")
+
+# -------------------------------
+# Variables finales
+# -------------------------------
+show_stats = config["CONFIG"].getboolean("show_stats", fallback=True)
+auto_close_tas = config["CONFIG"].getboolean("auto_close_tas", fallback=False)
 
 keymap = {k.lower(): int(v) for k, v in config["KEYMAP"].items()}
 keymap_inv = {v: k for k, v in keymap.items()}
 
 # -------------------------------
-# Paths conocidos
+# Paths Pizza Tower
 # -------------------------------
 pt_original = r"D:/SteamLibrary/steamapps/common/Pizza Tower/PizzaTower.exe"
-pt_tas      = r"D:/SteamLibrary/steamapps/common/Pizza Tower1/PizzaTower.exe"
-pt_path = os.path.expandvars(r"%APPDATA%\PizzaTower_GM2")
-tas_file = os.path.join(pt_path, "tas.ptm")
-tas_txt = r"./tas.txt"
+pt_tas = r"D:/SteamLibrary/steamapps/common/Pizza Tower1/PizzaTower.exe"
+pt_path = os.path.join(os.environ["APPDATA"], "PizzaTower_GM2")
 
 # -------------------------------
-# Buscar Pizza Tower
+# Encontrar proceso
 # -------------------------------
 def find_running_pizza():
     for proc in psutil.process_iter(['pid', 'name', 'exe']):
         try:
-            if proc.info['name'].lower() == "pizzatower.exe":
+            if proc.info['name'] and proc.info['name'].lower() == "pizzatower.exe":
                 return proc
         except:
             pass
     return None
 
 # -------------------------------
-# Argumentos CLI
+# Argumentos
 # -------------------------------
 parser = argparse.ArgumentParser(description="Convertir TAS TXT ↔ PTM automáticamente")
 group = parser.add_mutually_exclusive_group(required=True)
@@ -113,24 +126,26 @@ group.add_argument("-r", "--read", action="store_true")
 group.add_argument("-w", "--write", action="store_true")
 args = parser.parse_args()
 
-# =========================================================
-# WRITE: TXT → PTM (soporte 'w [5]')
-# =========================================================
+# -------------------------------
+# Contador de inputs
+# -------------------------------
+input_counter = defaultdict(int)
+
+# =====================================================
+# WRITE: TXT → PTM
+# =====================================================
 if args.write:
 
-    proc = find_running_pizza()
-    if proc is not None:
-        running_exe = os.path.normpath(proc.info['exe'])
-        if running_exe == os.path.normpath(pt_tas):
-            print("✔ Cerrando Pizza Tower TAS abierto...")
-            proc.terminate()
-            time.sleep(1)
-            if proc.is_running():
-                proc.kill()
-        elif running_exe == os.path.normpath(pt_original):
-            print("⚠ Pizza Tower ORIGINAL abierto, no se cerrará.")
-        else:
-            print("⚠ Pizza Tower abierto desde path desconocido:", running_exe)
+    if auto_close_tas:
+        proc = find_running_pizza()
+        if proc:
+            running_exe = os.path.normpath(proc.info['exe'])
+            if running_exe == os.path.normpath(pt_tas):
+                print("✔ Cerrando Pizza Tower TAS...")
+                proc.terminate()
+                time.sleep(1)
+                if proc.is_running():
+                    proc.kill()
 
     if not os.path.isdir(pt_path):
         print("ERROR: No existe la carpeta PizzaTower_GM2.")
@@ -151,76 +166,109 @@ if args.write:
             tas_output += "\n"
             continue
 
-        # Detectar formato "algo [n]"
-        if "[" in stripped and stripped.endswith("]"):
-            try:
-                base_part, repeat_part = stripped.rsplit("[", 1)
-                repeat_count = int(repeat_part[:-1].strip())
-                base_part = base_part.strip()
-            except ValueError:
-                continue
-        else:
-            base_part = stripped
-            repeat_count = 1
+        # Detectar formato: sft,d [49]
+        if "[" in stripped and "]" in stripped:
+            parts = stripped.split("[")
+            keys_part = parts[0].strip()
+            duration = int(parts[1].replace("]", "").strip())
 
-        keys_in_line = [k.strip() for k in base_part.split(",") if k.strip()]
-        frame_codes = [str(keymap.get(k.lower(), "")) for k in keys_in_line]
-        frame_line = ",".join(frame_codes) + ",\n"
+            keys = [k.strip() for k in keys_part.split(",") if k.strip()]
 
-        for _ in range(repeat_count):
+            if duration <= 0:
+                raise ValueError("Duración debe ser mayor que 0")
+
+            frame_codes = [str(keymap[k.lower()]) for k in keys if k.lower() in keymap]
+            frame_line = ",".join(frame_codes) + ",\n"
+
             tas_output += frame_line
+
+            for _ in range(duration - 1):
+                tas_output += frame_line
+
+            for key in keys:
+                if key.lower() in keymap:
+                    input_counter[key.lower()] += duration
+
+        else:
+            keys = [k.strip() for k in stripped.split(",") if k.strip()]
+            frame_codes = [str(keymap[k.lower()]) for k in keys if k.lower() in keymap]
+            frame_line = ",".join(frame_codes) + ",\n"
+            tas_output += frame_line
+
+            for key in keys:
+                if key.lower() in keymap:
+                    input_counter[key.lower()] += 1
 
     with open(tas_file, "w", encoding="utf-8") as out:
         out.write(tas_output)
 
-    print("✔ TAS PTM generated:", tas_file)
+    print("✔ TAS PTM generado.")
 
-# =========================================================
-# READ: PTM → TXT (compactar a 'w [5]')
-# =========================================================
+# =====================================================
+# READ: PTM → TXT
+# =====================================================
 elif args.read:
 
     with open(tas_file, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
-    frames = []
-
-    for line in lines:
-        line_content = line.rstrip("\n")
-        if not line_content:
-            frames.append("")
-            continue
-
-        parts = line_content.split(",")
-        mapped_parts = []
-
-        for p in parts:
-            if p.strip() == "":
-                continue
-            try:
-                k_int = int(p)
-                mapped_parts.append(keymap_inv.get(k_int, str(k_int)))
-            except ValueError:
-                pass
-
-        frames.append(",".join(mapped_parts))
-
     with open(tas_txt, "w", encoding="utf-8") as f:
-        i = 0
-        while i < len(frames):
-            current = frames[i]
-            count = 1
-            j = i + 1
 
-            while j < len(frames) and frames[j] == current:
-                count += 1
-                j += 1
+        last_line = None
+        repeat_count = 0
 
-            if count > 1:
-                f.write(f"{current} [{count}]\n")
+        for line in lines:
+            line_content = line.rstrip("\n")
+
+            if not line_content:
+                continue
+
+            parts = line_content.split(",")
+            mapped_parts = []
+
+            for p in parts:
+                if not p.strip():
+                    continue
+                try:
+                    k_int = int(p)
+                    if k_int in keymap_inv:
+                        mapped_parts.append(keymap_inv[k_int])
+                        input_counter[keymap_inv[k_int]] += 1
+                except:
+                    pass
+
+            current_line = ",".join(mapped_parts)
+
+            if current_line == last_line:
+                repeat_count += 1
             else:
-                f.write(current + "\n")
+                if last_line is not None:
+                    if repeat_count > 1:
+                        f.write(f"{last_line} [{repeat_count}]\n")
+                    else:
+                        f.write(f"{last_line}\n")
+                last_line = current_line
+                repeat_count = 1
 
-            i = j
+        if last_line is not None:
+            if repeat_count > 1:
+                f.write(f"{last_line} [{repeat_count}]\n")
+            else:
+                f.write(f"{last_line}\n")
 
-    print("✔ Created readable file:", tas_txt)
+    print("✔ TXT generado.")
+
+# =====================================================
+# STATS
+# =====================================================
+if show_stats and input_counter:
+    print("\n[INPUT STATS]")
+
+    sorted_inputs = sorted(
+        input_counter.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    for key, count in sorted_inputs:
+        print(f"{key} -> {count} frames")
