@@ -2,16 +2,88 @@ import psutil
 import os
 import time
 import argparse
+import configparser
 
 # -------------------------------
-# Configuración de teclas
+# Paths
 # -------------------------------
-keymap = {
-    "w": 87, "a": 65, "s": 83, "d": 68,
-    "sft": 16, "spc": 32, "o": 79, "c": 67,
-    "esc": 27,
-    "l": 76, "i": 73, "k": 75, "e": 69,
+src_folder = "src"
+keymap_path = os.path.join(src_folder, "keymap.ini")
+
+# -------------------------------
+# Config base ORIGINAL del juego
+# -------------------------------
+default_keymap = {
+    "up": 38,
+    "down": 40,
+    "left": 37,
+    "right": 39,
+    "z": 90,
+    "x": 88,
+    "c": 67
 }
+
+# -------------------------------
+# Crear archivo si no existe
+# -------------------------------
+if not os.path.exists(keymap_path):
+    print("⚠ keymap.ini no encontrado, creando configuración base del juego...")
+
+    os.makedirs(src_folder, exist_ok=True)
+
+    config = configparser.ConfigParser()
+    config["KEYMAP"] = {k: str(v) for k, v in default_keymap.items()}
+
+    with open(keymap_path, "w") as f:
+        config.write(f)
+
+    print("✔ keymap.ini creado automáticamente.")
+
+# -------------------------------
+# Cargar configuración
+# -------------------------------
+config = configparser.ConfigParser()
+config.read(keymap_path)
+
+if "KEYMAP" not in config:
+    raise ValueError("ERROR: No existe la sección [KEYMAP] en keymap.ini")
+
+# -------------------------------
+# Validar duplicados y valores inválidos
+# -------------------------------
+modified = False
+seen_values = {}
+
+for key, value in config["KEYMAP"].items():
+    try:
+        value_int = int(value)
+    except ValueError:
+        print(f"⚠ Valor inválido en '{key}', restaurando default si existe.")
+        if key in default_keymap:
+            config["KEYMAP"][key] = str(default_keymap[key])
+            modified = True
+        continue
+
+    if value_int in seen_values:
+        print(f"⚠ Duplicado detectado ({value_int}) entre '{key}' y '{seen_values[value_int]}'.")
+        if key in default_keymap:
+            config["KEYMAP"][key] = str(default_keymap[key])
+            modified = True
+    else:
+        seen_values[value_int] = key
+
+# -------------------------------
+# Guardar cambios si hubo correcciones
+# -------------------------------
+if modified:
+    with open(keymap_path, "w") as f:
+        config.write(f)
+    print("✔ keymap.ini corregido automáticamente.")
+
+# -------------------------------
+# Crear diccionarios finales
+# -------------------------------
+keymap = {k.lower(): int(v) for k, v in config["KEYMAP"].items()}
 keymap_inv = {v: k for k, v in keymap.items()}
 
 # -------------------------------
