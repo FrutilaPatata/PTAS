@@ -28,7 +28,7 @@ default_keymap = {
 # Crear archivo si no existe
 # -------------------------------
 if not os.path.exists(keymap_path):
-    print("⚠ keymap.ini no encontrado, creando configuración base del juego...")
+    print("⚠ keymap.ini no encontrado, creando configuración base...")
 
     os.makedirs(src_folder, exist_ok=True)
 
@@ -41,7 +41,7 @@ if not os.path.exists(keymap_path):
     print("✔ keymap.ini creado automáticamente.")
 
 # -------------------------------
-# Leer archivo (anti-BOM Windows)
+# Leer archivo (anti-BOM)
 # -------------------------------
 config = configparser.ConfigParser()
 
@@ -75,17 +75,11 @@ for key, value in config["KEYMAP"].items():
     else:
         seen_values[value_int] = key
 
-# -------------------------------
-# Guardar si hubo correcciones
-# -------------------------------
 if modified:
     with open(keymap_path, "w", encoding="utf-8") as f:
         config.write(f)
     print("✔ keymap.ini corregido automáticamente.")
 
-# -------------------------------
-# Crear diccionarios finales
-# -------------------------------
 keymap = {k.lower(): int(v) for k, v in config["KEYMAP"].items()}
 keymap_inv = {v: k for k, v in keymap.items()}
 
@@ -99,7 +93,7 @@ tas_file = os.path.join(pt_path, "tas.ptm")
 tas_txt = r"./tas.txt"
 
 # -------------------------------
-# Función para encontrar Pizza Tower
+# Buscar Pizza Tower
 # -------------------------------
 def find_running_pizza():
     for proc in psutil.process_iter(['pid', 'name', 'exe']):
@@ -111,18 +105,19 @@ def find_running_pizza():
     return None
 
 # -------------------------------
-# Argumentos de línea de comando
+# Argumentos CLI
 # -------------------------------
 parser = argparse.ArgumentParser(description="Convertir TAS TXT ↔ PTM automáticamente")
 group = parser.add_mutually_exclusive_group(required=True)
-group.add_argument("-r", "--read", action="store_true", help="Read tas.ptm and generate tas.txt")
-group.add_argument("-w", "--write", action="store_true", help="Take tas.txt and overwrite tas.ptm")
+group.add_argument("-r", "--read", action="store_true")
+group.add_argument("-w", "--write", action="store_true")
 args = parser.parse_args()
 
-# -------------------------------
-# MODO WRITE: TXT → PTM
-# -------------------------------
+# =========================================================
+# WRITE: TXT → PTM (soporte 'w [5]')
+# =========================================================
 if args.write:
+
     proc = find_running_pizza()
     if proc is not None:
         running_exe = os.path.normpath(proc.info['exe'])
@@ -135,62 +130,97 @@ if args.write:
         elif running_exe == os.path.normpath(pt_original):
             print("⚠ Pizza Tower ORIGINAL abierto, no se cerrará.")
         else:
-            print("⚠ Pizza Tower abierto desde path desconocido, no se cerrará:", running_exe) 
+            print("⚠ Pizza Tower abierto desde path desconocido:", running_exe)
 
     if not os.path.isdir(pt_path):
         print("ERROR: No existe la carpeta PizzaTower_GM2.")
         exit()
+
     if not os.path.isfile(tas_file):
         open(tas_file, "w").close()
 
-    # Leer tas.txt
-    with open(tas_txt, "r") as file:
+    with open(tas_txt, "r", encoding="utf-8") as file:
         lines = file.read().splitlines()
 
-    # Convertir a keycodes
     tas_output = ""
+
     for line in lines:
         stripped = line.strip()
+
         if not stripped:
             tas_output += "\n"
             continue
-        keys_in_line = [k.strip() for k in line.split(",") if k.strip()]
-        frame_codes = [str(keymap.get(k.lower(), "")) for k in keys_in_line]
-        tas_output += ",".join(frame_codes) + ",\n"
 
-    # Guardar tas.ptm
-    with open(tas_file, "w") as out:
+        # Detectar formato "algo [n]"
+        if "[" in stripped and stripped.endswith("]"):
+            try:
+                base_part, repeat_part = stripped.rsplit("[", 1)
+                repeat_count = int(repeat_part[:-1].strip())
+                base_part = base_part.strip()
+            except ValueError:
+                continue
+        else:
+            base_part = stripped
+            repeat_count = 1
+
+        keys_in_line = [k.strip() for k in base_part.split(",") if k.strip()]
+        frame_codes = [str(keymap.get(k.lower(), "")) for k in keys_in_line]
+        frame_line = ",".join(frame_codes) + ",\n"
+
+        for _ in range(repeat_count):
+            tas_output += frame_line
+
+    with open(tas_file, "w", encoding="utf-8") as out:
         out.write(tas_output)
 
     print("✔ TAS PTM generated:", tas_file)
 
-# -------------------------------
-# MODO READ: PTM → TXT
-# -------------------------------
+# =========================================================
+# READ: PTM → TXT (compactar a 'w [5]')
+# =========================================================
 elif args.read:
-    with open(tas_file, "r") as f:
+
+    with open(tas_file, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
-    with open(tas_txt, "w") as f:
-        for line in lines:
-            line_ending = "\n" if line.endswith("\n") else ""
-            line_content = line.rstrip("\n")
-            if not line_content:
-                f.write(line_ending)
+    frames = []
+
+    for line in lines:
+        line_content = line.rstrip("\n")
+        if not line_content:
+            frames.append("")
+            continue
+
+        parts = line_content.split(",")
+        mapped_parts = []
+
+        for p in parts:
+            if p.strip() == "":
                 continue
-            parts = line_content.split(",")
-            mapped_parts = []
-            for p in parts:
-                if p.strip() == "":
-                    mapped_parts.append("")
-                elif ((p.strip() == "160") or (p.strip() == "161")) or (p.strip() == ","):
-                    pass
-                else:
-                    try:
-                        k_int = int(p)
-                        mapped_parts.append(keymap_inv.get(k_int, f"{k_int}"))
-                    except ValueError:
-                        mapped_parts.append(p)
-            f.write(",".join(mapped_parts) + line_ending)
+            try:
+                k_int = int(p)
+                mapped_parts.append(keymap_inv.get(k_int, str(k_int)))
+            except ValueError:
+                pass
+
+        frames.append(",".join(mapped_parts))
+
+    with open(tas_txt, "w", encoding="utf-8") as f:
+        i = 0
+        while i < len(frames):
+            current = frames[i]
+            count = 1
+            j = i + 1
+
+            while j < len(frames) and frames[j] == current:
+                count += 1
+                j += 1
+
+            if count > 1:
+                f.write(f"{current} [{count}]\n")
+            else:
+                f.write(current + "\n")
+
+            i = j
 
     print("✔ Created readable file:", tas_txt)
