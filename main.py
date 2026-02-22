@@ -191,11 +191,18 @@ def compress_lines(lines):
             count += 1
         else:
             if last is not None:
-                result.append(f"{last} [{count}]" if count > 1 else last)
+                if count > 1:
+                    # Empty frames: "[N]" — non-empty frames: "keys [N]"
+                    result.append(f"[{count}]" if last == "" else f"{last} [{count}]")
+                else:
+                    result.append(last)
             last = line
             count = 1
     if last is not None:
-        result.append(f"{last} [{count}]" if count > 1 else last)
+        if count > 1:
+            result.append(f"[{count}]" if last == "" else f"{last} [{count}]")
+        else:
+            result.append(last)
     return result
 
 # -------------------------------
@@ -343,6 +350,12 @@ if args.write:
             parts = stripped.split("[")
             keys_part = parts[0].strip()
             duration = int(parts[1].replace("]", "").strip())
+
+            # "[N]" with no keys = N empty frames
+            if not keys_part:
+                for _ in range(duration):
+                    tas_output += "\n"
+                continue
             if duration <= 0:
                 raise ValueError("Duración debe ser mayor que 0")
             keys = [k.strip() for k in keys_part.split(",") if k.strip()]
@@ -380,10 +393,8 @@ elif args.read:
 
     for line in lines:
         line_content = line.rstrip("\n")
-        if not line_content:
-            continue
 
-        parts = line_content.split(",")
+        parts = line_content.split(",") if line_content else []
         mapped_parts = []
 
         for p in parts:
