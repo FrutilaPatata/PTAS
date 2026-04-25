@@ -4,13 +4,16 @@ import time
 import argparse
 import configparser
 from collections import defaultdict
+from pathlib import Path
 
 # -------------------------------
 # Paths robustos
 # -------------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-src_folder = os.path.join(BASE_DIR, "src")
-config_path = os.path.join(src_folder, "config.ini")
+BASE_DIR = Path(__file__).resolve().parent
+SRC_DIR = BASE_DIR / "src"
+CONFIG_PATH = SRC_DIR / "config.ini"
+MACROS_DIR = SRC_DIR / "macros"
+TAS_TXT = BASE_DIR / "tas.pt"
 
 # -------------------------------
 # Default KEYMAP (vanilla ejemplo)
@@ -33,13 +36,13 @@ default_config = {
 # -------------------------------
 # Crear config.ini si no existe
 # -------------------------------
-if not os.path.exists(config_path):
+if not CONFIG_PATH.exists():
     print("⚠ config.ini no encontrado, creando archivo base...")
-    os.makedirs(src_folder, exist_ok=True)
+    SRC_DIR.mkdir(parents=True, exist_ok=True)
     config_create = configparser.ConfigParser()
     config_create["CONFIG"] = default_config
     config_create["KEYMAP"] = {k: str(v) for k, v in default_keymap.items()}
-    with open(config_path, "w", encoding="utf-8") as f:
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         config_create.write(f)
     print("✔ config.ini creado.")
 
@@ -47,7 +50,7 @@ if not os.path.exists(config_path):
 # Leer config.ini
 # -------------------------------
 config = configparser.ConfigParser()
-with open(config_path, "r", encoding="utf-8-sig") as f:
+with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
     config.read_file(f)
 
 modified = False
@@ -64,7 +67,7 @@ if modified:
     new_config = configparser.ConfigParser()
     new_config["CONFIG"] = config["CONFIG"]
     new_config["KEYMAP"] = config["KEYMAP"]
-    with open(config_path, "w", encoding="utf-8") as f:
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         new_config.write(f)
     config = new_config
     print("✔ config.ini actualizado automáticamente.")
@@ -117,22 +120,19 @@ if "MULTIBIND" in config:
 # -------------------------------
 # Paths Macros
 # -------------------------------
-macros_folder = os.path.join(src_folder, "macros")
-os.makedirs(macros_folder, exist_ok=True)
+MACROS_DIR.mkdir(parents=True, exist_ok=True)
 
 # -------------------------------
 # Cargar macros (.pt.macro)
 # -------------------------------
 def load_macros():
     macros = {}
-    if not os.path.isdir(macros_folder):
+    if not MACROS_DIR.is_dir():
         return macros
-    for filename in os.listdir(macros_folder):
-        if filename.endswith(".pt.macro"):
-            macro_name = filename[:-9]
-            macro_path = os.path.join(macros_folder, filename)
-            with open(macro_path, "r", encoding="utf-8") as f:
-                macros[macro_name.lower()] = f.read().splitlines()
+    for macro_file in MACROS_DIR.glob("*.pt.macro"):
+        macro_name = macro_file.stem.replace(".pt", "")
+        with open(macro_file, "r", encoding="utf-8") as f:
+            macros[macro_name.lower()] = f.read().splitlines()
     return macros
 
 # -------------------------------
@@ -259,22 +259,21 @@ def replace_with_macros(txt_lines, macro_index):
 # -------------------------------
 # Paths Pizza Tower
 # -------------------------------
-pt_original = r"D:/SteamLibrary/steamapps/common/Pizza Tower/PizzaTower.exe"
-pt_tas = r"D:/SteamLibrary/steamapps/common/Pizza Tower1/PizzaTower.exe"
-pt_path = os.path.join(os.environ["APPDATA"], "PizzaTower_GM2")
-tas_file = os.path.join(pt_path, "tas.ptm")
-tas_txt = os.path.join(BASE_DIR, "tas.txt")
+PT_ORIGINAL = Path("D:/SteamLibrary/steamapps/common/Pizza Tower/PizzaTower.exe")
+PT_TAS = Path("D:/SteamLibrary/steamapps/common/Pizza Tower1/PizzaTower.exe")
+PT_PATH = Path(os.environ["APPDATA"]) / "PizzaTower_GM2"
+TAS_FILE = PT_PATH / "tas.ptm"
 
 # -------------------------------
 # Encontrar proceso Pizza Tower
 # -------------------------------
 def find_running_pizza():
-    for proc in psutil.process_iter(['pid', 'name', 'exe']):
-        try:
-            if proc.info['name'] and proc.info['name'].lower() == "pizzatower.exe":
+    try:
+        for proc in psutil.process_iter(['pid', 'name', 'exe']):
+            if proc.info['name'].lower() == "pizzatower.exe":
                 return proc
-        except:
-            pass
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        pass
     return None
 
 # -------------------------------
@@ -291,43 +290,14 @@ args = parser.parse_args()
 # -------------------------------
 input_counter = defaultdict(int)
 
-# =====================================================
-# WRITE: TXT → PTM
-# =====================================================
-if args.write:
-
-    if auto_close_tas:
-        proc = find_running_pizza()
-        if proc:
-            running_exe = os.path.normpath(proc.info['exe'])
-            if running_exe == os.path.normpath(pt_tas):
-                print("✔ Cerrando Pizza Tower TAS...")
-                proc.terminate()
-                time.sleep(1)
-                if proc.is_running():
-                    proc.kill()
-
-    if not os.path.isdir(pt_path):
-        print("ERROR: No existe la carpeta PizzaTower_GM2.")
-        exit()
-
-    if not os.path.isfile(tas_file):
-        open(tas_file, "w").close()
-
-    macros = load_macros()
-    if macros:
-        print(f"✔ Macros cargadas: {', '.join(macros.keys())}")
-
-    with open(tas_txt, "r", encoding="utf-8") as file:
-        lines = file.read().splitlines()
-
-    lines = expand_macros(lines, macros)
-
-    tas_output = ""
-
-    def resolve_keys_to_codes(keys, duration=1):
+# -------------------------------
+# Resolver teclas a códigos y keysnames
+# -------------------------------
+def resolve_keys_to_codes(keys_str, duration=1, mode="write"):
+    """Convierte nombres de teclas/multibinds a keycodes o viceversa según mode."""
+    if mode == "write":
         codes = []
-        for k in keys:
+        for k in keys_str:
             k = k.lower()
             if k in multibind_map:
                 for sub_key in multibind_map[k]:
@@ -338,6 +308,55 @@ if args.write:
                 codes.append(str(keymap[k]))
                 input_counter[k] += duration
         return codes
+    else:  # read mode: códigos -> nombres
+        names = []
+        for code_str in keys_str:
+            if not code_str.strip():
+                continue
+            try:
+                k_int = int(code_str)
+                if k_int in keymap_inv:
+                    name = keymap_inv[k_int]
+                    names.append(name)
+                    input_counter[name] += 1
+                elif k_int in multibind_inv:
+                    for sub_key in multibind_inv[k_int]:
+                        names.append(sub_key)
+                        input_counter[sub_key] += 1
+            except ValueError:
+                pass
+        return names
+
+# =====================================================
+# WRITE: TXT → PTM
+# =====================================================
+if args.write:
+
+    if auto_close_tas:
+        proc = find_running_pizza()
+        if proc and Path(proc.info['exe']).resolve() == PT_TAS.resolve():
+            print("✔ Cerrando Pizza Tower TAS...")
+            proc.terminate()
+            time.sleep(1)
+            if proc.is_running():
+                proc.kill()
+
+    if not PT_PATH.is_dir():
+        print("ERROR: No existe la carpeta PizzaTower_GM2.")
+        exit()
+
+    TAS_FILE.touch(exist_ok=True)
+
+    macros = load_macros()
+    if macros:
+        print(f"✔ Macros cargadas: {', '.join(macros.keys())}")
+
+    with open(TAS_TXT, "r", encoding="utf-8") as file:
+        lines = file.read().splitlines()
+
+    lines = expand_macros(lines, macros)
+
+    tas_output = ""
 
     for line in lines:
         stripped = line.strip()
@@ -358,18 +377,19 @@ if args.write:
                 continue
             if duration <= 0:
                 raise ValueError("Duración debe ser mayor que 0")
+            
             keys = [k.strip() for k in keys_part.split(",") if k.strip()]
-            frame_codes = resolve_keys_to_codes(keys, duration)
+            frame_codes = resolve_keys_to_codes(keys, duration, "write")
             frame_line = ",".join(frame_codes) + ",\n"
             for _ in range(duration):
                 tas_output += frame_line
         else:
             keys = [k.strip() for k in stripped.split(",") if k.strip()]
-            frame_codes = resolve_keys_to_codes(keys, 1)
+            frame_codes = resolve_keys_to_codes(keys, 1, "write")
             frame_line = ",".join(frame_codes) + ",\n"
             tas_output += frame_line
 
-    with open(tas_file, "w", encoding="utf-8") as out:
+    with open(TAS_FILE, "w", encoding="utf-8") as out:
         out.write(tas_output)
 
     print("✔ TAS PTM generado.")
@@ -384,7 +404,7 @@ elif args.read:
     if macro_index:
         print(f"✔ Macros cargadas para detección: {', '.join(macro_index.keys())}")
 
-    with open(tas_file, "r", encoding="utf-8") as f:
+    with open(TAS_FILE, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
     txt_lines = []
@@ -393,35 +413,9 @@ elif args.read:
 
     for line in lines:
         line_content = line.rstrip("\n")
-
         parts = line_content.split(",") if line_content else []
-        mapped_parts = []
-
-        for p in parts:
-            if not p.strip():
-                continue
-            try:
-                k_int = int(p)
-                if k_int in keymap_inv:
-                    name = keymap_inv[k_int]
-                    mapped_parts.append(name)
-                    input_counter[name] += 1
-                elif k_int in multibind_inv:
-                    for sub_key in multibind_inv[k_int]:
-                        mapped_parts.append(sub_key)
-                        input_counter[sub_key] += 1
-                else:
-                    import ctypes
-                    try:
-                        vk = ctypes.windll.user32.MapVirtualKeyW(k_int, 2)
-                        letter = chr(vk).lower() if vk else str(k_int)
-                    except Exception:
-                        letter = str(k_int)
-                    # print(f"⚠ Keycode {k_int} ({letter.upper()}) no definido, poniendo como '{letter}'")
-                    # mapped_parts.append(letter)
-            except Exception:
-                pass
-
+        
+        mapped_parts = resolve_keys_to_codes(parts, 1, "read")
         mapped_parts.sort(key=lambda k: CANONICAL_ORDER.index(k) if k in CANONICAL_ORDER else 9999)
         current_line = ",".join(mapped_parts)
 
@@ -439,7 +433,7 @@ elif args.read:
     if macro_index:
         txt_lines = replace_with_macros(txt_lines, macro_index)
 
-    with open(tas_txt, "w", encoding="utf-8") as f:
+    with open(TAS_TXT, "w", encoding="utf-8") as f:
         for line in txt_lines:
             f.write(line + "\n")
 
